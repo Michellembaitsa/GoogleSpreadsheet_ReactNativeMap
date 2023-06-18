@@ -1,0 +1,150 @@
+import React, { useEffect, useContext } from 'react';
+import { useState } from 'react';
+import { View, StyleSheet, Dimensions } from 'react-native';
+import axios from 'axios';
+import WltApi from '../api/WltApi';
+import AppContext from '../components/context/AppContext';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import CustomMapView from '../components/utility/CustomMapView';
+import Colors from '../../assets/colors/Colors';
+import CustomButton from '../components/utility/CustomButton';
+import FloatingButton from '../components/utility/HelpButton';
+
+function PublicAssetsScreen({ navigation }) {
+  const context = useContext(AppContext);
+
+  useEffect(() => {
+    getAssetLocationData();
+  }, [context.isNetworkConnected]);
+
+  const [assetData, setAssetData] = useState([]);
+  const [publicChargers, setPublicChargers] = useState([]);
+  const [mapRegion, setMapRegion] = useState();
+  const [focusedAsset, setFocusedAsset] = useState(null); // states to manage zoom click on an asset functionality
+
+  const getAssetLocationData = async () => {
+    try {
+      // Retrieve data from Google Spreadsheet
+      const response = await axios.get('https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/Sheet1?key={API_KEY}');
+      const chargersData = response.data.values;
+
+      // Convert data to the required format
+      const chargers = chargersData.map((charger) => ({
+        id: charger[0],
+        icon: 'ev-station',
+        coordinates: [parseFloat(charger[1]), parseFloat(charger[2])],
+        title: charger[3],
+      }));
+
+      setPublicChargers(chargers);
+
+      const assetResponse = await WltApi.getAssetLocationData(
+        {
+          ClientID: 'RGWYDw==',
+        },
+        true
+      );
+      if (assetResponse.data && assetResponse.status <= 299) {
+        setAssetData(assetResponse.data.Data);
+        assetResponse.data.Data.map((asset) =>
+          setMapRegion({
+            latitude: parseFloat(asset.Lat),
+            longitude: parseFloat(asset.Lon),
+            latitudeDelta: 0.1,
+            longitudeDelta: 0.09,
+          })
+        );
+      } else {
+        console.log('Error occurred. Check internet connection!');
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleAssetPress = (asset) => {
+    setFocusedAsset(asset);
+  };
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <CustomMapView
+        focusedAsset={focusedAsset}
+        mapRegion={mapRegion}
+        mapPadding={0}
+        assetData={assetData ? assetData : []}
+        handleAssetPress={handleAssetPress}
+        isBus={true}
+        PublicAssets={publicChargers}
+      />
+
+      <>
+        <View style={styles.pullTop}></View>
+
+        <View style={styles.pullBottom}>
+          <View style={styles.line} />
+          <CustomButton
+            BtnTxt={'Login to manage your assets'}
+            onPressBtn={() => navigation.navigate('Intro')}
+            BtnColor={'roamOrange'}
+            TxtColor={'white'}
+          />
+        </View>
+        <FloatingButton />
+      </>
+    </GestureHandlerRootView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  map: {
+    width: Dimensions.get('window').width,
+    height: '100%',
+  },
+  marker: {
+    width: 67,
+    height: 30,
+  },
+  pullBottom: {
+    backgroundColor: Colors.transparent,
+    opacity: 1,
+    height: Dimensions.get('window').height / 8,
+    width: '100%',
+    position: 'absolute',
+    bottom: 15,
+    borderTopEndRadius: 25,
+    borderTopLeftRadius: 25,
+  },
+  pullTop: {
+    flexDirection: 'row',
+    flex: 1,
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+    opacity: 0.8,
+    height: 50,
+    width: '90%',
+    position: 'absolute',
+    top: 55,
+    borderRadius: 0,
+    alignSelf: 'center',
+    padding: 10,
+    visible: false,
+  },
+  line: {
+    width: 75,
+    height: 6,
+    alignSelf: 'center',
+    marginVertical: 10,
+    borderRadius: 2,
+  },
+  topTxt: {
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+});
+
+export default PublicAssetsScreen;
